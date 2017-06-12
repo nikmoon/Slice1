@@ -1,40 +1,63 @@
 package nikpack;
 
-import java.util.HashSet;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Created by sa on 12.06.17.
  */
 public class Generator implements Runnable {
 
-    static volatile boolean stopThread = false;
-    static Set<Integer> set;
-    Random rand = new Random(System.currentTimeMillis());
+    public static volatile boolean stopThread = false;
+
+    private final int UNIQUE_LIMIT;
+    private Set<Integer> uniques;
+    private List<BlockingQueue<Integer>> queues;
+    private Random rand;
+    private int maxRand;
+
+
+    public Generator(int uniqueLimit, int maxRand) {
+        UNIQUE_LIMIT = uniqueLimit;
+        rand = new Random(System.currentTimeMillis());
+        uniques = new HashSet<>();
+        queues = new CopyOnWriteArrayList<>();
+        this.maxRand = maxRand;
+    }
 
     public Generator() {
-        set = new HashSet<>();
+        this(100, 100);
+    }
+
+    public void linkConsumer(BlockingQueue<Integer> queue) {
+        queues.add(queue);
     }
 
     @Override
     public void run() {
+        int uniqueCount;
         try {
             while (!stopThread) {
-                putValue(rand.nextInt(100));
-                Thread.sleep(1);
+                Thread.sleep(1000);
+                uniques.add(rand.nextInt(maxRand));
+                uniqueCount = uniques.size();
+                sendValue(uniqueCount);
+                if (uniqueCount >= UNIQUE_LIMIT) {
+                    sendValue(UNIQUE_LIMIT);
+                    break;
+                }
             }
         } catch (InterruptedException e) {
             System.out.println("Поток генератора прерван");
+            sendValue(UNIQUE_LIMIT);
         }
     }
 
-
-    public synchronized void putValue(int value) {
-        set.add(value);
+    private void sendValue(int value) {
+        for(BlockingQueue<Integer> queue: queues) {
+            queue.offer(value);
+        }
     }
 
-    public synchronized int getSetSize() {
-        return set.size();
-    }
 }
